@@ -1,55 +1,60 @@
-#!/usr/local/bin/jython
-"""OmnikOpenhab program.
+"""OmnikOpenHAB program.
 
-Get data from an omniksol inverter with 602xxxxx - 606xxxx ans save the data in
-a database or push to pvoutput.org.
+Get data from an Omnik inverter with 602xxxxx - 606xxxx ans save the data in
+OpenHAB items.
 """
+
+scriptExtension.importPreset("RuleSupport")
+scriptExtension.importPreset("RuleSimple")
+from org.slf4j import LoggerFactory
 import socket  # Needed for talking to inverter
 import sys
-import logging
-import logging.config
 import ConfigParser
 import os
-import InverterMsg  # Import the Msg handler
-
-
+#import InverterMsg  # Import the Msg handler
+import struct  # Converting bytes to numbers
 
 class OmnikOpenhab(object):
     """
-    Get data from Omniksol inverter and store the data in a configured output
-    format/location.
+    Get data from Omniksol inverter and store the data in OpenHAB items.
     """
-
+    global logger
+    logger = LoggerFactory.getLogger("org.eclipse.smarthome.model.script.rules")
     config = None
-    logger = None
     total_e_today = 0
     total_e_total = 0
     total_p_ac = 0
-    total_i_ac = 0
-    
+    total_i_ac = 0    
 
     def __init__(self, config_file):
-        # Load the setting
-        config_files = [self.__expand_path('config-default.cfg'),
-                        self.__expand_path(config_file)]
-
+        logger.info("omnikOPENHAB - Starting")
+        # Load the settings
+        path = "/etc/openhab2/automation/jsr223/"
+        config_files = path+config_file
         self.config = ConfigParser.RawConfigParser()
         self.config.read(config_files)
 
     def getInverters(self):
-        self.build_logger(self.config)
         #Get number of inverters
         inverterCount = len(self.config.sections())
+        #Reset totals to zero
+        OmnikOpenhab.total_e_today = 0
+        OmnikOpenhab.total_e_total = 0
+        OmnikOpenhab.total_p_ac = 0
+        OmnikOpenhab.total_i_ac = 0
         #For each inverter, get data and add to total
         for i in range(1,inverterCount):
             msg = self.run(i)
             self.add(msg)
-
-        self.logger.debug("Total_e_today: {0}".format(OmnikOpenhab.total_e_today))
-        self.logger.debug("Total_e_total: {0}".format(OmnikOpenhab.total_e_total))
-        self.logger.debug("Total_p_ac: {0}".format(OmnikOpenhab.total_p_ac)) 
-        self.logger.debug("Total_i_ac: {0}".format(OmnikOpenhab.total_i_ac)) 
-         
+        events.postUpdate("pv_new_etoday", str(OmnikOpenhab.total_e_today))
+        events.postUpdate("pv_new_etotal", str(OmnikOpenhab.total_e_total))
+        events.postUpdate("pv_new_pac", str(OmnikOpenhab.total_p_ac))
+        
+        logger.info("omnikOPENHAB - Total_e_today: {0}".format(OmnikOpenhab.total_e_today))
+        logger.info("omnikOPENHAB - Total_e_total: {0}".format(OmnikOpenhab.total_e_total))
+        logger.info("omnikOPENHAB - Total_p_ac: {0}".format(OmnikOpenhab.total_p_ac)) 
+        logger.info("omnikOPENHAB - Total_i_ac: {0}".format(OmnikOpenhab.total_i_ac)) 
+              
     
     def add(self,msg):
         OmnikOpenhab.total_e_today += msg.e_today
@@ -60,21 +65,13 @@ class OmnikOpenhab(object):
 
     def run(self,inverternr):
         """Get information from inverter and store is configured outputs."""
-
-        
-        
-        
-
         # Connect to inverter
         ip = self.config.get('inverter' + str(inverternr), 'ip')
         port = self.config.get('inverter' + str(inverternr), 'port')
-        
-
-        for res in socket.getaddrinfo(ip, port, socket.AF_INET,
-                                      socket.SOCK_STREAM):
+        for res in socket.getaddrinfo(ip, port, socket.AF_INET, socket.SOCK_STREAM):
             family, socktype, proto, canonname, sockadress = res
             try:
-                self.logger.debug('connecting to {0} port {1}'.format(ip, port))
+                logger.info("omnikOPENHAB - connecting to {0} port {1}".format(ip, port))
                 inverter_socket = socket.socket(family, socktype, proto)
                 inverter_socket.settimeout(10)
                 inverter_socket.connect(sockadress)
@@ -82,69 +79,17 @@ class OmnikOpenhab(object):
                 self.logger.error('Could not open socket')
                 self.logger.error(msg)
                 sys.exit(1)
-
         wifi_serial = self.config.getint('inverter' + str(inverternr), 'wifi_sn')
         inverter_socket.sendall(OmnikOpenhab.generate_string(wifi_serial))
         data = inverter_socket.recv(1024)
         inverter_socket.close()
-
-        msg = InverterMsg.InverterMsg(data)
-
-        self.logger.debug("ID: {0}".format(msg.id))
-  
+        msg = InverterMsg(data)
+        logger.info("omnikOPENHAB - ID: {0}".format(msg.id))
         return(msg)
-
-    def build_logger(self, config):
-        # Build logger
-        """
-        Build logger for this program
-
-
-        Args:
-            config: ConfigParser with settings from file
-        """
-        log_levels = dict(debug=10, info=20, warning=30, error=40, critical=50)
-        log_dict = {
-            'version': 1,
-            'formatters': {
-                'f': {'format': '%(asctime)s %(levelname)s %(message)s'}
-            },
-            'handlers': {
-                'none': {'class': 'logging.NullHandler'},
-                'console': {
-                    'class': 'logging.StreamHandler',
-                    'formatter': 'f'
-                },
-            },
-            'loggers': {
-                'OmnikLogger': {
-                    'handlers': config.get('log', 'type').split(','),
-                    'level': log_levels[config.get('log', 'level')]
-                }
-            }
-        }
-        logging.config.dictConfig(log_dict)
-        self.logger = logging.getLogger('OmnikLogger')
 
     def override_config(self, section, option, value):
         """Override config settings"""
         self.config.set(section, option, value)
-
-    @staticmethod
-    def __expand_path(path):
-        """
-        Expand relative path to absolute path.
-
-        Args:
-            path: file path
-
-        Returns: absolute path to file
-
-        """
-        if os.path.isabs(path):
-            return path
-        else:
-            return os.path.dirname(os.path.abspath(__file__)) + "/" + path
 
     @staticmethod
     def generate_string(serial_no):
@@ -162,18 +107,210 @@ class OmnikOpenhab(object):
             str: Information request string for inverter
         """
         response = '\x68\x02\x40\x30'
-
         double_hex = hex(serial_no)[2:] * 2
         hex_list = [double_hex[i:i + 2].decode('hex') for i in
                     reversed(range(0, len(double_hex), 2))]
-
         cs_count = 115 + sum([ord(c) for c in hex_list])
         checksum = hex(cs_count)[-2:].decode('hex')
         response += ''.join(hex_list) + '\x01\x00' + checksum + '\x16'
         return response
 
+class InverterMsg(object):
+    """Decode the response message from an omniksol inverter."""
+    raw_msg = ""
+
+    def __init__(self, msg, offset=0):
+        self.raw_msg = msg
+        self.offset = offset
+
+    def __get_string(self, begin, end):
+        """Extract string from message.
+
+        Args:
+            begin (int): starting byte index of string
+            end (int): end byte index of string
+
+        Returns:
+            str: String in the message from start to end
+        """
+        return self.raw_msg[begin:end]
+
+    def __get_short(self, begin, divider=10):
+        """Extract short from message.
+
+        The shorts in the message could actually be a decimal number. This is
+        done by storing the number multiplied in the message. So by dividing
+        the short the original decimal number can be retrieved.
+
+        Args:
+            begin (int): index of short in message
+            divider (int): divider to change short to float. (Default: 10)
+
+        Returns:
+            int or float: Value stored at location `begin`
+        """
+        num = struct.unpack('!H', self.raw_msg[begin:begin + 2])[0]
+        if num == 65535:
+            return -1
+        else:
+            return float(num) / divider
+
+    def __get_long(self, begin, divider=10):
+        """Extract long from message.
+
+        The longs in the message could actually be a decimal number. By
+        dividing the long, the original decimal number can be extracted.
+
+        Args:
+            begin (int): index of long in message
+            divider (int): divider to change long to float. (Default : 10)
+
+        Returns:
+            int or float: Value stored at location `begin`
+        """
+        return float(
+            struct.unpack('!I', self.raw_msg[begin:begin + 4])[0]) / divider
+
+    @property
+    def id(self):
+        """ID of the inverter."""
+        return self.__get_string(15, 31)
+
+    @property
+    def temperature(self):
+        """Temperature recorded by the inverter."""
+        return self.__get_short(31)
+
+    @property
+    def power(self):
+        """Power output"""
+        print self.__get_short(59)
+
+    @property
+    def e_total(self):
+        """Total energy generated by inverter in kWh"""
+        return self.__get_long(71)
+
+    def v_pv(self, i=1):
+        """Voltage of PV input channel.
+
+        Available channels are 1, 2 or 3; if not in this range the function will
+        default to channel 1.
+
+        Args:
+            i (int): input channel (valid values: 1, 2, 3)
+
+        Returns:
+            float: PV voltage of channel i
+        """
+        if i not in range(1, 4):
+            i = 1
+        num = 33 + (i - 1) * 2
+        return self.__get_short(num)
+
+    def i_pv(self, i=1):
+        """Current of PV input channel.
+
+        Available channels are 1, 2 or 3; if not in this range the function will
+        default to channel 1.
+
+        Args:
+            i (int): input channel (valid values: 1, 2, 3)
+
+        Returns:
+            float: PV current of channel i
+        """
+        if i not in range(1, 4):
+            i = 1
+        num = 39 + (i - 1) * 2
+        return self.__get_short(num)
+
+    def i_ac(self, i=1):
+        """Current of the Inverter output channel
+
+        Available channels are 1, 2 or 3; if not in this range the function will
+        default to channel 1.
+
+        Args:
+            i (int): output channel (valid values: 1, 2, 3)
+
+        Returns:
+            float: AC current of channel i
+
+        """
+        if i not in range(1, 4):
+            i = 1
+        num = 45 + (i - 1) * 2
+        return self.__get_short(num)
+
+    def v_ac(self, i=1):
+        """Voltage of the Inverter output channel
+
+        Available channels are 1, 2 or 3; if not in this range the function will
+        default to channel 1.
+
+        Args:
+            i (int): output channel (valid values: 1, 2, 3)
+
+        Returns:
+            float: AC voltage of channel i
+        """
+        if i not in range(1, 4):
+            i = 1
+        num = 51 + (i - 1) * 2
+        return self.__get_short(num)
+
+    def f_ac(self, i=1):
+        """Frequency of the output channel
+
+        Available channels are 1, 2 or 3; if not in this range the function will
+        default to channel 1.
+
+        Args:
+            i (int): output channel (valid values: 1, 2, 3)
+
+        Returns:
+            float: AC frequency of channel i
+        """
+        if i not in range(1, 4):
+            i = 1
+        num = 57 + (i - 1) * 4
+        return self.__get_short(num, 100)
+
+    def p_ac(self, i=1):
+        """Power output of the output channel
+
+        Available channels are 1, 2 or 3; if no tin this range the function will
+        default to channel 1.
+
+        Args:
+            i (int): output channel (valid values: 1, 2, 3)
+
+        Returns:
+            float: Power output of channel i
+        """
+        if i not in range(1, 4):
+            i = 1
+        num = 59 + (i - 1) * 4
+        return int(self.__get_short(num, 1))  # Don't divide
+
+    @property
+    def e_today(self):
+        """Energy generated by inverter today in kWh"""
+        return self.__get_short(69, 100)  # Divide by 100
+
+    @property
+    def h_total(self):
+        """Hours the inverter generated electricity"""
+        return int(self.__get_long(75, 1))  # Don't divide
 
 
-if __name__ == "__main__":
-    omnik_openhab = OmnikOpenhab('config.cfg')
-    omnik_openhab.getInverters()
+class myRule(SimpleRule):
+    def execute(self, module, inputs):
+        omnik_openhab = OmnikOpenhab('omnikOpenHAB.cfg')
+        omnik_openhab.getInverters()
+
+#Housekeeping below
+omnik = myRule()
+omnik.setTriggers([Trigger("aTimerTrigger", "timer.GenericCronTrigger", Configuration({"cronExpression": "0 * * * * ?"}))])
+automationManager.addRule(omnik)
