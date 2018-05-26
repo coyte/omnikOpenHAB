@@ -11,7 +11,6 @@ import socket  # Needed for talking to inverter
 import sys
 import ConfigParser
 import os
-#import InverterMsg  # Import the Msg handler
 import struct  # Converting bytes to numbers
 
 class OmnikOpenhab(object):
