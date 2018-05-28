@@ -7,6 +7,12 @@ The script is based on Woutrrr's Omnik-Data-Logger.
 ## Configuration
 The cfg file will need the ip address, port and wifi serial number for each inverter. You can add inverters using same format.
 
+The script return three values to be stored in existing OpenHAB items:
+etotal: Total energy production
+etoday: Today's energy production
+epower: Actual AC power
+
+
 ## OpenHAB
 This script has only be tested with v2 of OpenHAB.
 The script is a python script and needs the jsr223 installed and configured, no other dependecies exist.
