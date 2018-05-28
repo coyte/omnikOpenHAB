@@ -7,10 +7,11 @@ The script is based on Woutrrr's Omnik-Data-Logger.
 ## Configuration
 The cfg file will need the ip address, port and wifi serial number for each inverter. You can add inverters using same format.
 
-The script return three values to be stored in existing OpenHAB items:
-etotal: Total energy production
-etoday: Today's energy production
-epower: Actual AC power
+The script return three values to be stored in existing OpenHAB items:  
+etotal: Total energy production  
+etoday: Today's energy production  
+epower: Actual AC power  
+Assign existing OpenHAB items to populate with values.
 
 
 ## OpenHAB
