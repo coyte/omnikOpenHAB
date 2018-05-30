@@ -30,13 +30,15 @@ class OmnikOpenhab(object):
 
     def getInverters(self):
         #Get number of inverters
-        inverterCount = len(self.config.sections())-1
+        inverterCount = len(self.config.sections())-2
+        logger.info("omnikOPENHAB - Invertercount: {0}".format(inverterCount))
         #Reset totals to zero
         OmnikOpenhab.total_e_today = 0
         OmnikOpenhab.total_e_total = 0
         OmnikOpenhab.total_p_ac = 0
         #For each inverter, get data and add to total
-        for i in range(1,inverterCount):
+        for i in range(1,inverterCount+1):
+            #logger.info("omnikOPENHAB - In the inverterloop, value of index: {0}".format(i))
             msg = self.run(i)
             self.add(msg)
         
@@ -51,9 +53,11 @@ class OmnikOpenhab(object):
         epower = self.config.get('openhab_items', 'epower')
         logger.info("omnikOPENHAB - Item for actual power:   {0}    updated with {1}".format(epower,OmnikOpenhab.total_p_ac))
         events.postUpdate(str(epower), str(OmnikOpenhab.total_p_ac))
-              
+        
+        logger.info("omnikOPENHAB - End")
     
     def add(self,msg):
+        #logger.info("omnikOPENHAB - Adding data")
         OmnikOpenhab.total_e_today += msg.e_today
         OmnikOpenhab.total_e_total += msg.e_total
         OmnikOpenhab.total_p_ac += msg.p_ac(1) + msg.p_ac(2) + msg.p_ac(3)
@@ -80,7 +84,7 @@ class OmnikOpenhab(object):
         data = inverter_socket.recv(1024)
         inverter_socket.close()
         msg = InverterMsg(data)
-        logger.info("omnikOPENHAB - ID: {0}".format(msg.id))
+        #logger.info("omnikOPENHAB - ID: {0}".format(msg.id))
         return(msg)
 
     def override_config(self, section, option, value):
