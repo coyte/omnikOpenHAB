@@ -83,7 +83,7 @@ class OmnikOpenhab(object):
                 inverter_socket.settimeout(10)
                 inverter_socket.connect(sockadress)
             except socket.error as msg:
-                logger.info("OMNIKtest - Could not connect to inverter. Exiting...")
+                logger.info("omnikOPENHAB - Could not connect to inverter. Exiting...")
                 sys.exit(0)
         wifi_serial = self.config.getint('inverter' + str(inverternr), 'wifi_sn')
         inverter_socket.sendall(OmnikOpenhab.generate_string(wifi_serial))
