@@ -4,8 +4,11 @@ Get data from an Omnik inverter with 602xxxxx - 606xxxx ans save the data in
 OpenHAB items.
 """
 
+
 scriptExtension.importPreset("RuleSupport")
 scriptExtension.importPreset("RuleSimple")
+
+
 from org.slf4j import LoggerFactory
 import socket  # Needed for talking to inverter
 import sys
@@ -42,25 +45,29 @@ class OmnikOpenhab(object):
             msg = self.run(i)
             self.add(msg)
         
-        etotal = self.config.get('openhab_items', 'etotal')
-        logger.info("omnikOPENHAB - Item for total energy:   {0} updated with {1}".format(etotal,OmnikOpenhab.total_e_total))
-        events.postUpdate(str(etotal), str(OmnikOpenhab.total_e_total))
+        if msg:
+            etotal = self.config.get('openhab_items', 'etotal')
+            logger.info("omnikOPENHAB - Item for total energy:   {0} updated with {1}".format(etotal,OmnikOpenhab.total_e_total))
+            events.postUpdate(str(etotal), str(OmnikOpenhab.total_e_total))
         
-        etoday = self.config.get('openhab_items', 'etoday')
-        logger.info("omnikOPENHAB - Item for today's energy: {0} updated with {1}".format(etoday,OmnikOpenhab.total_e_today))
-        events.postUpdate(str(etoday), str(OmnikOpenhab.total_e_today))
+            etoday = self.config.get('openhab_items', 'etoday')
+            logger.info("omnikOPENHAB - Item for today's energy: {0} updated with {1}".format(etoday,OmnikOpenhab.total_e_today))
+            events.postUpdate(str(etoday), str(OmnikOpenhab.total_e_today))
         
-        epower = self.config.get('openhab_items', 'epower')
-        logger.info("omnikOPENHAB - Item for actual power:   {0}    updated with {1}".format(epower,OmnikOpenhab.total_p_ac))
-        events.postUpdate(str(epower), str(OmnikOpenhab.total_p_ac))
+            epower = self.config.get('openhab_items', 'epower')
+            logger.info("omnikOPENHAB - Item for actual power:   {0}    updated with {1}".format(epower,OmnikOpenhab.total_p_ac))
+            events.postUpdate(str(epower), str(OmnikOpenhab.total_p_ac))
         
-        logger.info("omnikOPENHAB - End")
+            logger.info("omnikOPENHAB - End")
+        else:
+            logger.info("Could not get inverter data, after sunset?")    
     
     def add(self,msg):
         #logger.info("omnikOPENHAB - Adding data")
         OmnikOpenhab.total_e_today += msg.e_today
         OmnikOpenhab.total_e_total += msg.e_total
         OmnikOpenhab.total_p_ac += msg.p_ac(1) + msg.p_ac(2) + msg.p_ac(3)
+
         
 
     def run(self,inverternr):
@@ -76,9 +83,8 @@ class OmnikOpenhab(object):
                 inverter_socket.settimeout(10)
                 inverter_socket.connect(sockadress)
             except socket.error as msg:
-                self.logger.error('Could not open socket')
-                self.logger.error(msg)
-                sys.exit(1)
+                logger.info("OMNIKtest - Could not connect to inverter. Exiting...")
+                sys.exit(0)
         wifi_serial = self.config.getint('inverter' + str(inverternr), 'wifi_sn')
         inverter_socket.sendall(OmnikOpenhab.generate_string(wifi_serial))
         data = inverter_socket.recv(1024)
