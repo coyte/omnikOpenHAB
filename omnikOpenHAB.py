@@ -47,13 +47,15 @@ class OmnikOpenhab(object):
             #logger.info("omnikOPENHAB - Value of msg is {0}".format(msg))
             #Assume daytime (for processing data)
             day=1
-            # If retrieved data contains "timed out", it is night: No updates
-            if 'timed' in format(msg):
+            # If retrieved data is not a InverterMsg object: No updates
+            #if 'timed' in format(msg):
+            if isinstance(msg,InverterMsg):
+                #logger.info("omnikOPENHAB - Day time -- valid data") 
+                self.add(msg)
+            else:    
                 day=0
                 #logger.info("omnikOPENHAB - Timed out - BREAKING")
                 break   
-            #logger.info("omnikOPENHAB - Day time -- valid data") 
-            self.add(msg)
             
             
     
@@ -63,13 +65,11 @@ class OmnikOpenhab(object):
             etoday = self.config.get('openhab_items', 'etoday')
             epower = self.config.get('openhab_items', 'epower')
             logger.info("omnikOPENHAB - Items updated: {0}: {1}, {2}: {3}, {4}: {5}, ".format(etotal,OmnikOpenhab.total_e_total,etoday,OmnikOpenhab.total_e_today,epower,OmnikOpenhab.total_p_ac))
-            #logger.info("omnikOPENHAB - Item for today's energy: {0} updated with {1}".format(etoday,OmnikOpenhab.total_e_today))
-            #logger.info("omnikOPENHAB - Item for actual power:   {0}    updated with {1}".format(epower,OmnikOpenhab.total_p_ac))
             events.postUpdate(str(etotal), str(OmnikOpenhab.total_e_total))
             events.postUpdate(str(etoday), str(OmnikOpenhab.total_e_today))
             events.postUpdate(str(epower), str(OmnikOpenhab.total_p_ac))
         else:
-            logger.info("omnikOPENHAB - After sunset, not updating database")
+            logger.info("omnikOPENHAB - No data (after sunset?), not updating database")
 
         #logger.info("omnikOPENHAB - End")
   
