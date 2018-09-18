@@ -5,6 +5,7 @@ OpenHAB items.
 """
 
 
+
 scriptExtension.importPreset("RuleSupport")
 scriptExtension.importPreset("RuleSimple")
 
@@ -24,7 +25,7 @@ class OmnikOpenhab(object):
     logger = LoggerFactory.getLogger("org.eclipse.smarthome.model.script.rules")
  
     def __init__(self, config_file):
-        logger.info("omnikOPENHAB - Starting")
+        #logger.info("omnikOPENHAB - Starting")
         # Load the settings
         path = "/etc/openhab2/automation/jsr223/"
         config_files = path+config_file
@@ -34,7 +35,7 @@ class OmnikOpenhab(object):
     def getInverters(self):
         #Get number of inverters
         inverterCount = len(self.config.sections())-2
-        logger.info("omnikOPENHAB - Invertercount: {0}".format(inverterCount))
+        #logger.info("omnikOPENHAB - Invertercount: {0}".format(inverterCount))
         #Reset totals to zero
         OmnikOpenhab.total_e_today = 0
         OmnikOpenhab.total_e_total = 0
@@ -43,25 +44,39 @@ class OmnikOpenhab(object):
         for i in range(1,inverterCount+1):
             #logger.info("omnikOPENHAB - In the inverterloop, value of index: {0}".format(i))
             msg = self.run(i)
+            #logger.info("omnikOPENHAB - Value of msg is {0}".format(msg))
+            #Assume daytime (for processing data)
+            day=1
+            # If retrieved data contains "timed out", it is night: No updates
+            if 'timed' in format(msg):
+                day=0
+                #logger.info("omnikOPENHAB - Timed out - BREAKING")
+                break   
+            #logger.info("omnikOPENHAB - Day time -- valid data") 
             self.add(msg)
-        
-        if msg:
-            etotal = self.config.get('openhab_items', 'etotal')
-            logger.info("omnikOPENHAB - Item for total energy:   {0} updated with {1}".format(etotal,OmnikOpenhab.total_e_total))
-            events.postUpdate(str(etotal), str(OmnikOpenhab.total_e_total))
-        
-            etoday = self.config.get('openhab_items', 'etoday')
-            logger.info("omnikOPENHAB - Item for today's energy: {0} updated with {1}".format(etoday,OmnikOpenhab.total_e_today))
-            events.postUpdate(str(etoday), str(OmnikOpenhab.total_e_today))
-        
-            epower = self.config.get('openhab_items', 'epower')
-            logger.info("omnikOPENHAB - Item for actual power:   {0}    updated with {1}".format(epower,OmnikOpenhab.total_p_ac))
-            events.postUpdate(str(epower), str(OmnikOpenhab.total_p_ac))
-        
-            logger.info("omnikOPENHAB - End")
-        else:
-            logger.info("Could not get inverter data, after sunset?")    
+            
+            
     
+        #Only process durig day time
+        if day:
+            etotal = self.config.get('openhab_items', 'etotal')
+            etoday = self.config.get('openhab_items', 'etoday')
+            epower = self.config.get('openhab_items', 'epower')
+            logger.info("omnikOPENHAB - Items updated: {0}: {1}, {2}: {3}, {4}: {5}, ".format(etotal,OmnikOpenhab.total_e_total,etoday,OmnikOpenhab.total_e_today,epower,OmnikOpenhab.total_p_ac))
+            #logger.info("omnikOPENHAB - Item for today's energy: {0} updated with {1}".format(etoday,OmnikOpenhab.total_e_today))
+            #logger.info("omnikOPENHAB - Item for actual power:   {0}    updated with {1}".format(epower,OmnikOpenhab.total_p_ac))
+            events.postUpdate(str(etotal), str(OmnikOpenhab.total_e_total))
+            events.postUpdate(str(etoday), str(OmnikOpenhab.total_e_today))
+            events.postUpdate(str(epower), str(OmnikOpenhab.total_p_ac))
+        else:
+            logger.info("omnikOPENHAB - After sunset, not updating database")
+
+        #logger.info("omnikOPENHAB - End")
+  
+
+
+
+
     def add(self,msg):
         #logger.info("omnikOPENHAB - Adding data")
         OmnikOpenhab.total_e_today += msg.e_today
@@ -73,24 +88,25 @@ class OmnikOpenhab(object):
     def run(self,inverternr):
         """Get information from inverter and store is configured outputs."""
         # Connect to inverter
+        msg=''
         ip = self.config.get('inverter' + str(inverternr), 'ip')
         port = self.config.get('inverter' + str(inverternr), 'port')
         for res in socket.getaddrinfo(ip, port, socket.AF_INET, socket.SOCK_STREAM):
             family, socktype, proto, canonname, sockadress = res
             try:
-                logger.info("omnikOPENHAB - connecting to {0} port {1}".format(ip, port))
+                #logger.info("omnikOPENHAB - connecting to {0} port {1}".format(ip, port))
                 inverter_socket = socket.socket(family, socktype, proto)
                 inverter_socket.settimeout(10)
                 inverter_socket.connect(sockadress)
+                #logger.info("omnikOPENHAB - Retrieved data..")
             except socket.error as msg:
-                logger.info("omnikOPENHAB - Could not connect to inverter. Exiting...")
-                sys.exit(0)
-        wifi_serial = self.config.getint('inverter' + str(inverternr), 'wifi_sn')
-        inverter_socket.sendall(OmnikOpenhab.generate_string(wifi_serial))
-        data = inverter_socket.recv(1024)
-        inverter_socket.close()
-        msg = InverterMsg(data)
-        #logger.info("omnikOPENHAB - ID: {0}".format(msg.id))
+                return(msg)
+                #logger.info("omnikOPENHAB - Could not connect to inverter.")
+            wifi_serial = self.config.getint('inverter' + str(inverternr), 'wifi_sn')
+            inverter_socket.sendall(OmnikOpenhab.generate_string(wifi_serial))
+            data = inverter_socket.recv(1024)
+            inverter_socket.close()
+            msg = InverterMsg(data)
         return(msg)
 
     def override_config(self, section, option, value):
@@ -319,4 +335,12 @@ class myRule(SimpleRule):
 #Housekeeping below
 omnik = myRule()
 omnik.setTriggers([Trigger("aTimerTrigger", "timer.GenericCronTrigger", Configuration({"cronExpression": "0 * * * * ?"}))])
+
+'''
+#Code block below enables triggerin of the rule by an item update, in this case the switch item 'ruleTrigger'
+omnik.triggers = [
+             Trigger("MyTrigger", "core.ItemStateUpdateTrigger", 
+                    Configuration({ "itemName": "ruleTrigger"}))
+        ]
+'''
 automationManager.addRule(omnik)
